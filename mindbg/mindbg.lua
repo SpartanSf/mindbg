@@ -205,6 +205,9 @@ debug.sethook(function(event, line)
         local info = debug.getinfo(2, "nSl")
         last_info = info
         current_line = line
+		local src = info.short_src
+		local file_line = get_source_line(src, line) or "<unavailable>"
+		
         local filename = info.short_src:gsub("^@", "")
 
 		if filename == "/mindbg/mindbg.lua" then
@@ -217,6 +220,11 @@ debug.sethook(function(event, line)
             debugger(info, line)
             break_mode = "step"
             target_line = nil
+		elseif break_mode == "continue" and not is_ROM(filename) then
+			if file_line:match("^__MINDBG_HALT()") then
+				debugger(info, line)
+				break_mode = "step"
+			end
         end
     end
 end, "l")
