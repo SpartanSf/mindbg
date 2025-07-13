@@ -1,6 +1,6 @@
 # mindbg
 Small yet advanced debugger for CC:T
-<img width="1908" height="1083" alt="debugger" src="https://github.com/user-attachments/assets/f08e13fa-bf94-4f24-aacc-29cd06308845" />
+<img width="477" height="271" alt="debugger" src="https://github.com/user-attachments/assets/f08e13fa-bf94-4f24-aacc-29cd06308845" />
 
 ## Usage
 ### Running step/s
