@@ -14,6 +14,9 @@ Running `until` or `u` will execute without stopping until a `MINDBG_HALT()` is 
 ### Running print
 To find the value of a variable mid-execution, run `print <expr>`. `print <expr>` accepts lua expressions, so you can do: `print math.floor(x) / 3 + 6`.
 
+### Running set
+To set the value of a variable mid-execution, run `set <value> = <expr>`. It accepts lua expressions, so you can do: `set x = { 15 / 6 + y }`
+
 ### Running bt
 Running `bt` prints out a backtrace of the last executed functions.
 
