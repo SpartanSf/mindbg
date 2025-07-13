@@ -1,3 +1,5 @@
+local pretty = require "cc.pretty"
+
 local term = term
 local w, h = term.getSize()
 
@@ -22,50 +24,10 @@ end
 
 local orig_term = term.current()
 
-local function dbg_write(sText)
-    sText = tostring(sText)
-
-    local w, h = dbg_win.getSize()
-    local x, y = dbg_win.getCursorPos()
-
-    local function scroll()
-        dbg_win.scroll(1)
-        y = h
-        x = 1
-        dbg_win.setCursorPos(x, y)
-    end
-
-    for line in (sText .. "\n"):gmatch("(.-)\n") do
-        while #line > 0 do
-            local remaining = w - x + 1
-            local segment = line:sub(1, remaining)
-            dbg_win.setCursorPos(x, y)
-            dbg_win.write(segment)
-            line = line:sub(#segment + 1)
-            x = x + #segment
-
-            if x > w then
-                x = 1
-                y = y + 1
-                if y > h then scroll() end
-            end
-        end
-
-        x = 1
-        y = y + 1
-        if y > h then scroll() end
-    end
-
-    dbg_win.setCursorPos(x, y)
-end
-
 local function dbg_print(...)
-    local nLimit = select("#", ...)
-    for n = 1, nLimit do
-        local s = tostring(select(n, ...))
-        if n < nLimit then s = s .. "\t" end
-        dbg_write(s)
-    end
+    term.redirect(dbg_win)
+	print(...)
+	term.redirect(prog_win)
 end
 
 local source_cache = {}
@@ -87,7 +49,8 @@ local function get_source_line(file, line)
     return source_cache[file][line]
 end
 
-local function debugger(info, line)
+local function debugger(info, line, level)
+    level = level or 3
     local src = info.short_src
     local file_line = get_source_line(src, line) or "<unavailable>"
     dbg_print(("[DEBUG] %s:%d: %s"):format(src, line, file_line))
@@ -120,7 +83,7 @@ local function debugger(info, line)
             local env = {}
             local i = 1
             while true do
-                local n, v = debug.getlocal(3, i)
+                local n, v = debug.getlocal(level, i)
                 if not n then break end
                 env[n] = v
                 i = i + 1
@@ -132,18 +95,102 @@ local function debugger(info, line)
             else
                 local ok, result = pcall(chunk)
                 if ok then
-                    dbg_print("= " .. tostring(result))
+					term.redirect(dbg_win)
+					term.write("= ")
+					pretty.pretty_print(result)
+					term.redirect(prog_win)
                 else
                     dbg_print("Runtime error: " .. result)
                 end
             end
         elseif cmd == "bt" then
-            local level = 2
+            local lvl = level
             while true do
-                local i = debug.getinfo(level, "nSl")
+                local i = debug.getinfo(lvl, "nSl")
                 if not i then break end
-                dbg_print(("#%d %s (%s:%d)"):format(level - 1, i.name or "<anon>", i.short_src, i.currentline))
-                level = level + 1
+                dbg_print(("#%d %s (%s:%d)"):format(lvl - level, i.name or "<anon>", i.short_src, i.currentline))
+                lvl = lvl + 1
+            end
+        elseif cmd:match("^set%s+") then
+            local var_expr = cmd:match("^set%s+(.+)")
+            local var_name, var_value = var_expr:match("^([%w_]+)%s*=%s*(.+)$")
+            
+            if not var_name or not var_value then
+                dbg_print("Usage: set <varname> = <value>")
+            else
+                local found = false
+                local i = 1
+                while true do
+                    local name, value = debug.getlocal(level, i)
+                    if not name then break end
+                    if name == var_name then
+                        local chunk, err = load("return "..var_value, "=(set)", "t", _ENV)
+                        if not chunk then
+                            dbg_print("Error in value expression: "..err)
+                        else
+                            local ok, new_value = pcall(chunk)
+                            if ok then
+                                debug.setlocal(level, i, new_value)
+								term.redirect(dbg_win)
+								term.write(("Set local %s = "):format(var_name))
+								pretty.pretty_print(new_value)
+								term.redirect(prog_win)
+                                found = true
+                                break
+                            else
+                                dbg_print("Error evaluating value: "..new_value)
+                            end
+                        end
+                    end
+                    i = i + 1
+                end
+                
+                if not found then
+                    local func = debug.getinfo(level, "f").func
+                    local j = 1
+                    while true do
+                        local name, value = debug.getupvalue(func, j)
+                        if not name then break end
+                        if name == var_name then
+                            local chunk, err = load("return "..var_value, "=(set)", "t", _ENV)
+                            if not chunk then
+                                dbg_print("Error in value expression: "..err)
+                            else
+                                local ok, new_value = pcall(chunk)
+                                if ok then
+                                    debug.setupvalue(func, j, new_value)
+									term.redirect(dbg_win)
+                                    term.write(("Set upvalue %s = "):format(var_name))
+									pretty.pretty_print(new_value)
+									term.redirect(prog_win)
+                                    found = true
+                                    break
+                                else
+                                    dbg_print("Error evaluating value: "..new_value)
+                                end
+                            end
+                        end
+                        j = j + 1
+                    end
+                end
+                
+                if not found then
+                    local chunk, err = load("return "..var_value, "=(set)", "t", _ENV)
+                    if not chunk then
+                        dbg_print("Error in value expression: "..err)
+                    else
+                        local ok, new_value = pcall(chunk)
+                        if ok then
+                            _G[var_name] = new_value
+							term.redirect(dbg_win)
+							term.write(("Set global %s = "):format(var_name))
+							pretty.pretty_print(new_value)
+							term.redirect(prog_win)
+                        else
+                            dbg_print("Error evaluating value: "..new_value)
+                        end
+                    end
+                end
             end
         elseif cmd == "info" then
             if last_info then
@@ -157,12 +204,12 @@ local function debugger(info, line)
                 dbg_print("  Args/Locals:")
                 local i = 1
                 while true do
-                    local name, value = debug.getlocal(2, i)
+                    local name, value = debug.getlocal(level, i)
                     if not name then break end
                     dbg_print(("    [%d] %s = %s"):format(i, name, tostring(value)))
                     i = i + 1
                 end
-                local funcinfo = debug.getinfo(2, "f")
+                local funcinfo = debug.getinfo(level, "f")
                 if funcinfo and funcinfo.func then
                     local j = 1
                     dbg_print("  Upvalues:")
@@ -177,7 +224,15 @@ local function debugger(info, line)
                 dbg_print("No function info available yet.")
             end
         elseif cmd == "help" then
-            dbg_print("Commands: step/s, continue/c, until/u <line>, print <expr>, bt, info, help")
+            dbg_print("Commands:")
+            dbg_print("  step/s              - Step to next line")
+            dbg_print("  continue/c          - Run until halt or end")
+            dbg_print("  until/u <n>         - Run until line n")
+            dbg_print("  print <expr>        - Evaluate expression")
+            dbg_print("  set <var> = <value> - Set variable value")
+            dbg_print("  bt                  - Backtrace stack")
+            dbg_print("  info                - Show function info and locals")
+            dbg_print("  exit                - Quit debugger")
         else
             dbg_print("Unknown command. Type 'help'.")
         end
@@ -205,26 +260,22 @@ debug.sethook(function(event, line)
         local info = debug.getinfo(2, "nSl")
         last_info = info
         current_line = line
-		local src = info.short_src
-		local file_line = get_source_line(src, line) or "<unavailable>"
-		
+        local src = info.short_src
+        local file_line = get_source_line(src, line) or "<unavailable>"
         local filename = info.short_src:gsub("^@", "")
-
-		if filename == "/mindbg/mindbg.lua" then
-			return
-		end
+        if filename == "/mindbg/mindbg.lua" then return end
 
         if break_mode == "step" and not is_ROM(filename) then
-            debugger(info, line)
+            debugger(info, line, 3)
         elseif break_mode == "until" and line == target_line and not is_ROM(filename) then
-            debugger(info, line)
+            debugger(info, line, 3)
             break_mode = "step"
             target_line = nil
-		elseif break_mode == "continue" and not is_ROM(filename) then
-			if file_line:match("^__MINDBG_HALT()") then
-				debugger(info, line)
-				break_mode = "step"
-			end
+        elseif break_mode == "continue" and not is_ROM(filename) then
+            if file_line:match("^__MINDBG_HALT()") then
+                debugger(info, line, 3)
+                break_mode = "step"
+            end
         end
     end
 end, "l")
