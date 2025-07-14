@@ -52,12 +52,12 @@ local function install()
     term.setBackgroundColor(colors.black)
     term.setTextColor(colors.yellow)
     term.clear()
-    centerText("Pine3D-HD Installer", 2)
+    centerText("mindbg Installer", 2)
 
     updateStatus("Loading manifest...")
     drawProgressBar(0)
 
-    local manifestUrl = "https://raw.githubusercontent.com/SpartanSf/Pine3D-HD/master/manifest.txt"
+    local manifestUrl = "https://raw.githubusercontent.com/SpartanSf/mindbg/master/manifest.txt"
     local response = http.get(manifestUrl)
     if not response then
         error("Failed to load manifest from: " .. manifestUrl)
@@ -89,7 +89,7 @@ local function install()
         local ratio = i / #steps
         if step.type == "file" then
             updateStatus("Downloading " .. step.localPath .. "...")
-            local fileUrl = "https://raw.githubusercontent.com/SpartanSf/Pine3D-HD/master/" .. step.remote
+            local fileUrl = "https://raw.githubusercontent.com/SpartanSf/mindbg/master/" .. step.remote
             downloadFile(fileUrl, step.localPath)
         elseif step.type == "dir" then
             updateStatus("Creating folder: " .. step.path)
