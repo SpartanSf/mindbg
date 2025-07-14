@@ -136,7 +136,7 @@ end
 
 local function debugger(info, line, level)
     level = level or 3
-    local src = info.short_src
+    local src = info.source:gsub("^@", "")
     local file_line = get_source_line(src, line) or "<source unavailable>"
 
     update_code_view(src, line)
@@ -196,7 +196,7 @@ local function debugger(info, line, level)
             while true do
                 local i = debug.getinfo(lvl, "nSl")
                 if not i then break end
-                dbg_print(("#%d %s (%s:%d)"):format(lvl - level, i.name or "<anon>", i.short_src, i.currentline))
+                dbg_print(("#%d %s (%s:%d)"):format(lvl - level, i.name or "<anon>", i.source:gsub("^@", ""), i.currentline))
                 lvl = lvl + 1
             end
         elseif cmd:match("^set%s+") then
@@ -262,7 +262,7 @@ local function debugger(info, line, level)
             if last_info then
                 dbg_print("Function Info:")
                 dbg_print("  Name:        " .. (last_info.name or "<anonymous>"))
-                dbg_print("  Source:      " .. last_info.short_src)
+                dbg_print("  Source:      " .. last_info.source:gsub("^@", ""))
                 dbg_print("  Line defined:" .. last_info.linedefined)
                 dbg_print("  Last line:   " .. last_info.lastlinedefined)
                 dbg_print("  Current line:" .. last_info.currentline)
@@ -324,11 +324,12 @@ debug.sethook(function(event, line)
 
         last_info = info
         current_line = line
-        local src = info.short_src
-        local filename = src:gsub("^@", "")
+		local src = info.source:gsub("^@", "")
+		local filename = src
         local file_line = get_source_line(src, line) or ""
 
         if filename:match("mindbg") then return end
+
         if is_ROM(filename) then
 			local stillReturn = true
 			for _,v in ipairs(whitelisted) do
@@ -359,9 +360,10 @@ debug.sethook(function(event, line)
     end
 end, "l")
 
-local function run_debugger(fn)
+local function run_debugger(fn, args)
     term.redirect(prog_win)
-    local ok, err = pcall(fn)
+
+    local ok, err = pcall(fn, table.unpack(args))
     term.redirect(orig_term)
 
     if not ok then
