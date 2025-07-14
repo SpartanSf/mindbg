@@ -8,6 +8,6 @@ file.close()
 
 local debugger = require("/mindbg/mindbg")
 
-local fileLoaded, err = load(fileData, "@" .. filePath)
+local fileLoaded, err = load(fileData, "@" .. filePath, "t", _ENV)
 
 debugger(fileLoaded)
