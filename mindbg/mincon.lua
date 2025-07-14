@@ -1,6 +1,7 @@
 -- Support program to run programs under the debugger without modification
 -- Usage: mincon example.lua
-local filePath = ...
+local args = {...}
+local filePath = table.remove(args, 1)
 
 local file = fs.open(filePath, "r")
 local fileData = file.readAll()
@@ -11,4 +12,4 @@ debugger.setWhitelisted({filePath})
 
 local fileLoaded, err = load(fileData, "@" .. filePath, "t", _ENV)
 
-debugger.runDebugger(fileLoaded)
+debugger.runDebugger(fileLoaded, args or {})
