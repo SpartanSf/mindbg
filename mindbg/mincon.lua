@@ -3,6 +3,8 @@
 local args = {...}
 local filePath = table.remove(args, 1)
 
+if not fs.exists(FilePath) then error("File does not exist", 0) end
+
 local file = fs.open(filePath, "r")
 local fileData = file.readAll()
 file.close()
