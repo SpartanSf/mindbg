@@ -1,0 +1,3 @@
+dir mindbg
+file mindbg/mindbg.lua mindbg/mindbg.lua
+file mindbg/mincon.lua mindbg/mincon.lua
