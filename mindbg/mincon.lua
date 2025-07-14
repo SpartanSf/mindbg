@@ -7,7 +7,8 @@ local fileData = file.readAll()
 file.close()
 
 local debugger = require("/mindbg/mindbg")
+debugger.setWhitelisted({filePath})
 
 local fileLoaded, err = load(fileData, "@" .. filePath, "t", _ENV)
 
-debugger(fileLoaded)
+debugger.runDebugger(fileLoaded)
