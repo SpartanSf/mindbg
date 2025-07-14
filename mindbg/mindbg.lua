@@ -86,7 +86,6 @@ end
 
 local function update_code_view(file, current_line)
     if not file or not current_line then return end
-    if is_ROM(file) then return end
 
     local lines = source_cache[file]
     if not lines then
@@ -127,6 +126,12 @@ local function dbg_print(...)
     term.redirect(dbg_win)
     print(...)
     term.redirect(prog_win)
+end
+
+local whitelisted = {}
+
+local function setWhitelisted(whitelist)
+	whitelisted = whitelist
 end
 
 local function debugger(info, line, level)
@@ -195,9 +200,105 @@ local function debugger(info, line, level)
                 lvl = lvl + 1
             end
         elseif cmd:match("^set%s+") then
+            local var, expr = cmd:match("^set%s+([%w_]+)%s*=%s*(.+)")
+            if not var or not expr then
+                dbg_print("Usage: set <var> = <expr>")
+            else
+                local env = {}
+                local i = 1
+                while true do
+                    local n, v = debug.getlocal(level, i)
+                    if not n then break end
+                    env[n] = v
+                    i = i + 1
+                end
+                setmetatable(env, { __index = _G })
+                
+                local chunk, err = load("return " .. expr, "=(debug)", "t", env)
+                if not chunk then
+                    dbg_print("Compile error: " .. err)
+                else
+                    local ok, result = pcall(chunk)
+                    if ok then
+                        local found = false
 
+                        for i = 1, math.huge do
+                            local name = debug.getlocal(level, i)
+                            if not name then break end
+                            if name == var then
+                                debug.setlocal(level, i, result)
+                                dbg_print(("Set local %s = %s"):format(var, tostring(result)))
+                                found = true
+                                break
+                            end
+                        end
+
+                        if not found then
+                            local funcinfo = debug.getinfo(level, "f")
+                            if funcinfo and funcinfo.func then
+                                for i = 1, math.huge do
+                                    local name = debug.getupvalue(funcinfo.func, i)
+                                    if not name then break end
+                                    if name == var then
+                                        debug.setupvalue(funcinfo.func, i, result)
+                                        dbg_print(("Set upvalue %s = %s"):format(var, tostring(result)))
+                                        found = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+
+                        if not found then
+                            _G[var] = result
+                            dbg_print(("Set global %s = %s"):format(var, tostring(result)))
+                        end
+                    else
+                        dbg_print("Runtime error: " .. result)
+                    end
+                end
+            end
         elseif cmd == "info" then
+            if last_info then
+                dbg_print("Function Info:")
+                dbg_print("  Name:        " .. (last_info.name or "<anonymous>"))
+                dbg_print("  Source:      " .. last_info.short_src)
+                dbg_print("  Line defined:" .. last_info.linedefined)
+                dbg_print("  Last line:   " .. last_info.lastlinedefined)
+                dbg_print("  Current line:" .. last_info.currentline)
+                dbg_print("  What:        " .. last_info.what)
+                dbg_print("  Args/Locals:")
 
+                local i = 1
+
+                while true do
+                    local name, value = debug.getlocal(3, i)
+                    if not name then break end
+					
+                    dbg_print(("    [%d] %s = %s"):format(i, name, tostring(value)))
+
+                    i = i + 1
+                end
+
+                local funcinfo = debug.getinfo(3, "f")
+
+                if funcinfo and funcinfo.func then
+                    local j = 1
+
+                    dbg_print("  Upvalues:")
+
+                    while true do
+                        local name, val = debug.getupvalue(funcinfo.func, j)
+                        if not name then break end
+
+                        dbg_print(("    [%d] %s = %s"):format(j, name, tostring(val)))
+
+                        j = j + 1
+                    end
+                end
+            else
+                dbg_print("No function info available yet.")
+            end
         elseif cmd == "help" then
             dbg_print("Commands:")
             dbg_print("  step/s              - Step to next line")
@@ -228,7 +329,17 @@ debug.sethook(function(event, line)
         local file_line = get_source_line(src, line) or ""
 
         if filename:match("mindbg") then return end
-        if is_ROM(filename) then return end
+        if is_ROM(filename) then
+			local stillReturn = true
+			for _,v in ipairs(whitelisted) do
+				if fs.combine(v) == fs.combine(filename) then
+					stillReturn = false
+					break
+				end
+			end
+			
+			if stillReturn then return end
+		end
 
         if break_mode == "step" then
             update_code_view(src, line)
@@ -262,4 +373,7 @@ local function run_debugger(fn)
     return ok, err
 end
 
-return run_debugger
+return {
+	runDebugger = run_debugger,
+	setWhitelisted = setWhitelisted
+}
